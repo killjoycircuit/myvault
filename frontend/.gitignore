@@ -1,0 +1,40 @@
+# Node modules
+**/node_modules/
+
+# Environment variables
+**/.env
+
+# Logs
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+
+# Build output
+frontend/dist/
+frontend/.vite/
+
+# VS Code settings
+.vscode/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Dependency lockfiles (if using only one type, remove the other)
+package-lock.json
+yarn.lock
+
+# Coverage files
+coverage/
+
+# Optional: Ignore frontend build artifacts if deployed separately
+*.local
+
+# Optional: Ignore IDE-specific files
+.idea/
+*.sublime-project
+*.sublime-w*
+
+
+# Ignore node modules
+node_modules/
