@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Upload, Camera, Link2 } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Link2, Camera } from 'lucide-react';
 
 const SignupPage = ({ onSignupSuccess }) => {
   const navigate = useNavigate();
@@ -32,6 +32,11 @@ const SignupPage = ({ onSignupSuccess }) => {
     
     if (formData.username.length < 3) {
       setError('Username must be at least 3 characters long');
+      return false;
+    }
+    
+    if (formData.username.length > 20) {
+      setError('Username must be no more than 20 characters long');
       return false;
     }
     
@@ -116,25 +121,30 @@ const SignupPage = ({ onSignupSuccess }) => {
             const signinData = await signinResponse.json();
 
             if (signinResponse.ok) {
-              // Store user data in memory for the session (removed localStorage)
-              const userData = {
-                token: signinData.token,
-                email: formData.email.toLowerCase().trim(),
-                username: formData.username.trim(),
-                avatar: formData.avatar.trim() || ""
-              };
+              // Store user data and token in localStorage (this is the standard approach)
+              localStorage.setItem('token', signinData.token);
+              localStorage.setItem('user', JSON.stringify({
+                id: signinData.user.id,
+                username: signinData.user.username,
+                email: signinData.user.email,
+                avatar: signinData.user.avatar
+              }));
               
-              console.log('Auto-signin successful, token received:', signinData.token ? 'Yes' : 'No');
+              console.log('Auto-signin successful, token stored');
               
-              // Call parent success handler
+              // Call parent success handler if provided
               if (onSignupSuccess) {
-                onSignupSuccess(userData);
+                onSignupSuccess({
+                  token: signinData.token,
+                  user: signinData.user
+                });
               }
               
               // Navigate directly to HomePage after successful signup and auto-signin
               navigate('/homepage');
             } else {
               // If auto-signin fails, redirect to login page
+              console.error('Auto-signin failed:', signinData.message);
               setTimeout(() => {
                 navigate('/login');
               }, 1000);
@@ -251,7 +261,7 @@ const SignupPage = ({ onSignupSuccess }) => {
             {/* Username Field */}
             <div className="space-y-1">
               <label className="block text-sm font-medium text-gray-700">
-                Username
+                Username *
               </label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -274,7 +284,7 @@ const SignupPage = ({ onSignupSuccess }) => {
             {/* Email Field */}
             <div className="space-y-1">
               <label className="block text-sm font-medium text-gray-700">
-                Email
+                Email *
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -297,7 +307,7 @@ const SignupPage = ({ onSignupSuccess }) => {
             {/* Password Field */}
             <div className="space-y-1">
               <label className="block text-sm font-medium text-gray-700">
-                Password
+                Password *
               </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -347,7 +357,6 @@ const SignupPage = ({ onSignupSuccess }) => {
                              disabled:bg-gray-50 disabled:cursor-not-allowed"
                 />
               </div>
-            
             </div>
 
             {/* Submit Button */}

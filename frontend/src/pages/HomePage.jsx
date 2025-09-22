@@ -187,7 +187,6 @@ const HomePage = () => {
     }
     setShowShareModal(false);
   };
-
   // Handle tag creation
   const handleCreateTag = async () => {
     if (!newTag.name.trim()) return;
