@@ -160,13 +160,11 @@ const HomePage = () => {
     });
     return counts;
   };
-
   // Handle logout
   const handleLogout = () => {
     localStorage.removeItem('token');
     window.location.href = '/login';
   };
-
   // Handle share vault
   const handleShareVault = async () => {
     try {
