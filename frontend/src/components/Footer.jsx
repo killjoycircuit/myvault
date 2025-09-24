@@ -85,7 +85,7 @@ const Footer = () => {
             </div>
           </div>
 
-          {/* Quick Links */}
+          {/* Quick Links
           <div>
             <h3 className="text-lg font-semibold text-white mb-6">Product</h3>
             <ul className="space-y-4">
@@ -114,7 +114,7 @@ const Footer = () => {
                 </button>
               </li>
             </ul>
-          </div>
+          </div> */}
 
           {/* Support */}
           <div>
@@ -141,7 +141,7 @@ const Footer = () => {
         {/* Bottom Bar */}
         <div className="border-t border-gray-800 mt-12 pt-8 flex flex-col lg:flex-row items-center justify-between">
           <span className="text-gray-400 text-sm">
-            &copy; 2024 MyVault. All rights reserved.
+            &copy; 2025 MyVault. All rights reserved.
           </span>
           <div className="flex items-center space-x-6 mt-4 lg:mt-0">
             <span className="text-gray-400 text-sm">Built with ❤️ for knowledge workers</span>
