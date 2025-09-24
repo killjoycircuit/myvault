@@ -27,6 +27,7 @@ import {
   FileText
 } from 'lucide-react';
 import { Card } from '../assets/Card';
+import { API_BASE_URL } from '../../config';
 
 const HomePage = () => {
   // State management
@@ -67,8 +68,8 @@ const HomePage = () => {
     { value: 'other', label: 'Other', icon: Hash, color: '#6B7280' }
   ];
 
-  // API Base URL - replace with your backend URL
-  const API_BASE = 'http://localhost:3000/api/v1';
+  // API Base URL
+  const API_BASE = API_BASE_URL;
 
   // Get auth token from localStorage
   const getAuthToken = () => localStorage.getItem('token');

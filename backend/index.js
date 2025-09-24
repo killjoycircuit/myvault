@@ -54,50 +54,102 @@ app.post("/api/v1/signup", async function (req, res) {
     const { username, email, password, avatar } = req.body;
     
     const requireBody = z.object({
-        username: z.string().min(3).max(20),
-        email: z.string().email(),
-        password: z.string().min(6).max(20),
-        avatar: z.string().url().optional().or(z.literal(""))
+        username: z.string().min(3, "Username must be at least 3 characters").max(20, "Username must be no more than 20 characters"),
+        email: z.string().email("Please enter a valid email address"),
+        password: z.string().min(6, "Password must be at least 6 characters").max(20, "Password must be no more than 20 characters"),
+        avatar: z.union([
+            z.string().url("Please enter a valid URL for the avatar"),
+            z.literal(""),
+            z.undefined()
+        ]).optional().transform(val => val || "")
     });
 
     try {
+        console.log("Signup request received:", { username, email, avatar: avatar ? "provided" : "empty" });
+
         const parseData = requireBody.safeParse(req.body);
         if (!parseData.success) {
+            console.log("Validation failed:", parseData.error.issues);
             return res.status(400).json({
                 message: "Invalid Data",
-                error: parseData.error.issues
+                error: parseData.error.issues,
+                errors: parseData.error.issues.map(issue => issue.message)
             });
         }
 
-        const existingUser = await userModel.findOne({ 
-            $or: [{ email: email }, { username: username }] 
+        // Check for existing email first (case-insensitive)
+        const existingUserByEmail = await userModel.findOne({ 
+            email: { $regex: new RegExp(`^${email}$`, 'i') }
         });
         
-        if (existingUser) {
+        if (existingUserByEmail) {
+            console.log("Email already exists:", email);
             return res.status(409).json({
-                message: existingUser.email === email ? "Email already exists" : "Username already exists"
+                message: "This email is already registered. Please sign in instead.",
+                action: "signin"
+            });
+        }
+
+        // Check for existing username (case-insensitive)
+        const existingUserByUsername = await userModel.findOne({ 
+            username: { $regex: new RegExp(`^${username}$`, 'i') }
+        });
+        
+        if (existingUserByUsername) {
+            console.log("Username already exists:", username);
+            return res.status(409).json({
+                message: "This username is already taken. Please choose another."
             });
         }
 
         const hashPassword = await bcryptjs.hash(password, 10);
         
         const newUser = await userModel.create({
-            username: username,
-            email: email,
+            username: username.trim(),
+            email: email.toLowerCase().trim(),
             password: hashPassword,
-            avatar: avatar || ""
+            avatar: avatar && avatar.trim() ? avatar.trim() : ""
         });
 
-        console.log("New user created:", email);
+        console.log("New user created successfully:", email);
 
         res.status(201).json({
-            message: "You are signed up successfully"
+            message: "You are signed up successfully",
+            user: {
+                id: newUser._id,
+                username: newUser.username,
+                email: newUser.email,
+                avatar: newUser.avatar
+            }
         });
 
     } catch (error) {
-        console.error("Signup error:", error);
+        console.error("Signup error details:", error);
+        
+        // Handle MongoDB duplicate key errors
+        if (error.code === 11000) {
+            const field = Object.keys(error.keyPattern)[0];
+            const message = field === 'email' ? 
+                "This email is already registered. Please sign in instead." :
+                `This ${field} is already taken`;
+            
+            return res.status(409).json({
+                message: message,
+                action: field === 'email' ? "signin" : undefined
+            });
+        }
+
+        // Handle Mongoose validation errors
+        if (error.name === 'ValidationError') {
+            const validationErrors = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({
+                message: "Validation failed",
+                errors: validationErrors
+            });
+        }
+
         res.status(500).json({
-            message: "Error occurred during signup"
+            message: "Internal server error occurred during signup"
         });
     }
 });
@@ -131,7 +183,6 @@ app.post("/api/v1/signin", async function (req, res) {
         const token = Jwt.sign(tokenPayload, JWT_SECRET_KEY, { expiresIn: "7d" });
         
         console.log("User signed in:", email);
-        console.log("Token created with secret:", JWT_SECRET_KEY ? "✓" : "✗");
         
         res.json({
             message: "Signed in successfully",
@@ -152,93 +203,18 @@ app.post("/api/v1/signin", async function (req, res) {
     }
 });
 
-// Get user profile endpoint
-app.get("/api/v1/profile", userMiddleware, async function (req, res) {
+// Logout endpoint
+app.post("/api/v1/logout", userMiddleware, async function (req, res) {
     try {
-        const user = await userModel.findById(req.userId).select('-password');
+        console.log("User logged out:", req.userId);
         
-        if (!user) {
-            return res.status(404).json({
-                message: "User not found"
-            });
-        }
-
-        console.log("Profile fetched for user:", req.userId);
-
         res.json({
-            message: "Profile fetched successfully",
-            user: {
-                id: user._id,
-                username: user.username,
-                email: user.email,
-                avatar: user.avatar
-            }
+            message: "Logged out successfully"
         });
     } catch (error) {
-        console.error("Profile fetch error:", error);
+        console.error("Logout error:", error);
         res.status(500).json({
-            message: "Error occurred while fetching profile"
-        });
-    }
-});
-
-// Update user profile endpoint
-app.put("/api/v1/profile", userMiddleware, async function (req, res) {
-    const { username, avatar } = req.body;
-    
-    const updateSchema = z.object({
-        username: z.string().min(3).max(20).optional(),
-        avatar: z.string().url().optional().or(z.literal(""))
-    });
-
-    try {
-        const parseData = updateSchema.safeParse({ username, avatar });
-        if (!parseData.success) {
-            return res.status(400).json({
-                message: "Invalid profile data",
-                error: parseData.error.issues
-            });
-        }
-
-        // Check if username is already taken by another user
-        if (username) {
-            const existingUser = await userModel.findOne({ 
-                username: username,
-                _id: { $ne: req.userId }
-            });
-            
-            if (existingUser) {
-                return res.status(409).json({
-                    message: "Username already exists"
-                });
-            }
-        }
-
-        const updateData = {};
-        if (username !== undefined) updateData.username = username;
-        if (avatar !== undefined) updateData.avatar = avatar;
-
-        const updatedUser = await userModel.findByIdAndUpdate(
-            req.userId, 
-            updateData,
-            { new: true, select: '-password' }
-        );
-
-        console.log("Profile updated for user:", req.userId);
-
-        res.json({
-            message: "Profile updated successfully",
-            user: {
-                id: updatedUser._id,
-                username: updatedUser.username,
-                email: updatedUser.email,
-                avatar: updatedUser.avatar
-            }
-        });
-    } catch (error) {
-        console.error("Profile update error:", error);
-        res.status(500).json({
-            message: "Error occurred while updating profile"
+            message: "Error occurred during logout"
         });
     }
 });
@@ -372,7 +348,49 @@ app.get("/api/v1/tags", userMiddleware, async function (req, res) {
     }
 });
 
-// Create content endpoint (updated with tags support)
+// Delete tag endpoint
+app.delete("/api/v1/tags", userMiddleware, async function (req, res) {
+    const { tagId } = req.body;
+    
+    if (!tagId) {
+        return res.status(400).json({
+            message: "Tag ID is required"
+        });
+    }
+
+    try {
+        // Remove tag from all content first
+        await contentModel.updateMany(
+            { userId: req.userId },
+            { $pull: { tags: tagId } }
+        );
+
+        // Delete the tag
+        const result = await tagModel.deleteOne({ 
+            userId: req.userId, 
+            _id: tagId 
+        });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({
+                message: "Tag not found or unauthorized"
+            });
+        }
+
+        console.log("Tag deleted for user:", req.userId);
+
+        res.json({
+            message: "Tag deleted successfully"
+        });
+    } catch (error) {
+        console.error("Tag deletion error:", error);
+        res.status(500).json({
+            message: "Error occurred while deleting tag"
+        });
+    }
+});
+
+// Create content endpoint
 app.post("/api/v1/content", userMiddleware, async function (req, res) {
     const { link, type, title, tags } = req.body;
     
@@ -428,7 +446,7 @@ app.post("/api/v1/content", userMiddleware, async function (req, res) {
     }
 });
 
-// Get user content endpoint (updated with tags population and sorting)
+// Get user content endpoint
 app.get("/api/v1/content", userMiddleware, async function (req, res) {
     try {
         const { sortBy, filterTag } = req.query;
@@ -513,48 +531,6 @@ app.delete("/api/v1/content", userMiddleware, async function (req, res) {
     }
 });
 
-// Delete tag endpoint
-app.delete("/api/v1/tags", userMiddleware, async function (req, res) {
-    const { tagId } = req.body;
-    
-    if (!tagId) {
-        return res.status(400).json({
-            message: "Tag ID is required"
-        });
-    }
-
-    try {
-        // Remove tag from all content first
-        await contentModel.updateMany(
-            { userId: req.userId },
-            { $pull: { tags: tagId } }
-        );
-
-        // Delete the tag
-        const result = await tagModel.deleteOne({ 
-            userId: req.userId, 
-            _id: tagId 
-        });
-
-        if (result.deletedCount === 0) {
-            return res.status(404).json({
-                message: "Tag not found or unauthorized"
-            });
-        }
-
-        console.log("Tag deleted for user:", req.userId);
-
-        res.json({
-            message: "Tag deleted successfully"
-        });
-    } catch (error) {
-        console.error("Tag deletion error:", error);
-        res.status(500).json({
-            message: "Error occurred while deleting tag"
-        });
-    }
-});
-
 // Share brain endpoint
 app.post("/api/v1/brain/share", userMiddleware, async function (req, res) {
     try {
@@ -599,7 +575,7 @@ app.post("/api/v1/brain/share", userMiddleware, async function (req, res) {
     }
 });
 
-// Get shared brain content endpoint (updated with tags)
+// Get shared brain content endpoint
 app.get("/api/v1/brain/:shareLink", async function (req, res) {
     try {
         const link = await linkModel.findOne({ hash: req.params.shareLink });
@@ -639,12 +615,10 @@ app.get('/api/v1/preview', async (req, res) => {
     try {
         const response = await axios.get(url, {
             headers: {
-                // Add headers to mimic a real browser request
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                 'Accept-Language': 'en-US,en;q=0.5'
             },
-            // Set a timeout to prevent hanging requests
             timeout: 5000 
         });
 

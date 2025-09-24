@@ -2,7 +2,7 @@ import { useState } from 'react'
 import './App.css'
 import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
 import SignupPage from './pages/SignupPage'
-import LoginPage from './pages/Loginpage'
+import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage';
 import LandingPage from './pages/LandingPage';
 
