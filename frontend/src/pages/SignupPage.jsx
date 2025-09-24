@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { User, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle, Link2, Camera } from 'lucide-react';
+import { API_BASE_URL } from '../../config';
 
 const SignupPage = ({ onSignupSuccess }) => {
   const navigate = useNavigate();
@@ -74,7 +75,9 @@ const SignupPage = ({ onSignupSuccess }) => {
     return true;
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    if (e) e.preventDefault();
+    
     if (!validateForm()) return;
 
     setIsSubmitting(true);
@@ -82,6 +85,8 @@ const SignupPage = ({ onSignupSuccess }) => {
     setSuccess(false);
     
     try {
+      console.log('Attempting signup with API URL:', API_BASE_URL);
+      
       const signupData = {
         username: formData.username.trim(),
         email: formData.email.toLowerCase().trim(),
@@ -89,7 +94,9 @@ const SignupPage = ({ onSignupSuccess }) => {
         avatar: formData.avatar.trim() || ""
       };
 
-      const response = await fetch('http://localhost:3000/api/v1/signup', {
+      console.log('Sending signup request:', { ...signupData, password: '[REDACTED]' });
+
+      const response = await fetch(`${API_BASE_URL}/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,7 +104,17 @@ const SignupPage = ({ onSignupSuccess }) => {
         body: JSON.stringify(signupData)
       });
 
-      const data = await response.json();
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
+      let data;
+      try {
+        data = await response.json();
+        console.log('Response data:', data);
+      } catch (jsonError) {
+        console.error('Failed to parse JSON response:', jsonError);
+        throw new Error('Invalid response from server');
+      }
 
       if (response.ok) {
         console.log('Registration successful:', data.message);
@@ -106,8 +123,10 @@ const SignupPage = ({ onSignupSuccess }) => {
         // Show success message briefly, then automatically sign in the user
         setTimeout(async () => {
           try {
+            console.log('Attempting auto-signin...');
+            
             // Automatically sign in after successful signup
-            const signinResponse = await fetch('http://localhost:3000/api/v1/signin', {
+            const signinResponse = await fetch(`${API_BASE_URL}/signin`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -119,9 +138,10 @@ const SignupPage = ({ onSignupSuccess }) => {
             });
 
             const signinData = await signinResponse.json();
+            console.log('Auto-signin response:', signinResponse.status, signinData);
 
             if (signinResponse.ok) {
-              // Store user data and token in localStorage (this is the standard approach)
+              // Store user data and token in localStorage
               localStorage.setItem('token', signinData.token);
               localStorage.setItem('user', JSON.stringify({
                 id: signinData.user.id,
@@ -145,21 +165,25 @@ const SignupPage = ({ onSignupSuccess }) => {
             } else {
               // If auto-signin fails, redirect to login page
               console.error('Auto-signin failed:', signinData.message);
+              setError('Account created successfully, but auto-signin failed. Please sign in manually.');
               setTimeout(() => {
                 navigate('/login');
-              }, 1000);
+              }, 2000);
             }
           } catch (autoSigninError) {
             console.error('Auto signin error:', autoSigninError);
+            setError('Account created successfully, but auto-signin failed. Please sign in manually.');
             // Redirect to login page if auto-signin fails
             setTimeout(() => {
               navigate('/login');
-            }, 1000);
+            }, 2000);
           }
         }, 1500);
         
       } else {
         // Handle different error cases with improved messaging
+        console.error('Signup failed:', response.status, data);
+        
         if (response.status === 409) {
           if (data.action === 'signin') {
             setError('This email is already registered. Please sign in instead.');
@@ -168,7 +192,7 @@ const SignupPage = ({ onSignupSuccess }) => {
               navigate('/login');
             }, 3000);
           } else {
-            setError('An account with this email already exists.');
+            setError(data.message || 'An account with this information already exists.');
           }
         } else if (response.status === 400) {
           if (data.errors && Array.isArray(data.errors)) {
@@ -186,8 +210,18 @@ const SignupPage = ({ onSignupSuccess }) => {
         }
       }
     } catch (error) {
-      console.error('Network error:', error);
-      setError('Unable to connect to server. Please check if the backend is running on port 3000.');
+      console.error('Network error details:', error);
+      
+      // More specific error handling
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        setError(`Cannot connect to server at ${API_BASE_URL}. Please check if the backend is running on the correct port.`);
+      } else if (error.message.includes('Invalid response')) {
+        setError('Server returned an invalid response. Please try again.');
+      } else if (error.code === 'ECONNREFUSED') {
+        setError('Connection refused. Please ensure the backend server is running on port 3000.');
+      } else {
+        setError(`Connection error: ${error.message}. Please check your internet connection and try again.`);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -199,6 +233,7 @@ const SignupPage = ({ onSignupSuccess }) => {
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
+      e.preventDefault();
       handleSubmit();
     }
   };
@@ -217,6 +252,7 @@ const SignupPage = ({ onSignupSuccess }) => {
               Create Account
             </h1>
             <p className="text-gray-500">Join your Second Brain</p>
+            <p className="text-xs text-gray-400 mt-2">API: {API_BASE_URL}</p>
           </div>
 
           {/* Success Message */}
@@ -229,9 +265,11 @@ const SignupPage = ({ onSignupSuccess }) => {
 
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-3 rounded-lg bg-red-50 border border-red-200 flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="mb-6 p-3 rounded-lg bg-red-50 border border-red-200 flex items-start space-x-2">
+              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm text-red-700 whitespace-pre-wrap">{error}</p>
+              </div>
             </div>
           )}
 
@@ -255,8 +293,8 @@ const SignupPage = ({ onSignupSuccess }) => {
             </div>
           )}
 
-          {/* Form Fields */}
-          <div className="space-y-5" onKeyPress={handleKeyPress}>
+          {/* Form */}
+          <form onSubmit={handleSubmit} onKeyPress={handleKeyPress} className="space-y-5">
             
             {/* Username Field */}
             <div className="space-y-1">
@@ -361,8 +399,7 @@ const SignupPage = ({ onSignupSuccess }) => {
 
             {/* Submit Button */}
             <button
-              type="button"
-              onClick={handleSubmit}
+              type="submit"
               disabled={isSubmitting || success || !formData.email || !formData.password || !formData.username}
               className={`w-full py-2.5 px-4 rounded-lg bg-indigo-600 text-white font-medium
                          hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 
@@ -402,7 +439,7 @@ const SignupPage = ({ onSignupSuccess }) => {
                 </Link>
               </p>
             </div>
-          </div>
+          </form>
         </div>
       </div>
     </div>

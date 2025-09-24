@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { LogIn, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { API_BASE_URL } from '../../config';
 
 const LoginPage = ({ onLoginSuccess }) => {
   const navigate = useNavigate();
@@ -31,7 +32,7 @@ const LoginPage = ({ onLoginSuccess }) => {
     setError('');
     
     try {
-      const response = await fetch('http://localhost:3000/api/v1/signin', {
+      const response = await fetch(`${API_BASE_URL}/signin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -42,22 +43,29 @@ const LoginPage = ({ onLoginSuccess }) => {
       const data = await response.json();
 
       if (response.ok) {
-        // Store user data in memory for the session (removed localStorage)
-        const userData = {
-          token: data.token,
-          email: formData.email,
+        // Normalize and persist auth so other pages (e.g., HomePage) can use it
+        const normalizedEmail = (formData.email || '').toLowerCase().trim();
+        const userPayload = {
+          id: data.user?.id,
           username: data.user?.username || '',
+          email: data.user?.email || normalizedEmail,
           avatar: data.user?.avatar || ''
         };
-        
+
+        // Persist for authenticated API calls
+        if (data.token) {
+          localStorage.setItem('token', data.token);
+        }
+        localStorage.setItem('user', JSON.stringify(userPayload));
+
         console.log('Login successful:', data.message);
         console.log('Token received:', data.token ? 'Yes' : 'No');
-        
+
         // Call the parent component's success handler
         if (onLoginSuccess) {
-          onLoginSuccess(userData);
+          onLoginSuccess({ token: data.token, ...userPayload });
         }
-        
+
         // Navigate to homepage
         navigate('/homepage');
       } else {
